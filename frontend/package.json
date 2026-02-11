@@ -21,8 +21,7 @@
     "tailwind-merge": "^3.4.0",
     "three": "^0.167.1",
     "recharts": "^2.15.0",
-    "viem": "^2.45.1",
-    "@registrai/kya": "file:../sdk"
+    "viem": "^2.45.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
