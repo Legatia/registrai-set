@@ -1,0 +1,19 @@
+{
+  "name": "erc8004-indexer",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Off-chain indexer for ERC-8004 — watches L2 registries and writes to Cloudflare D1",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.4"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
