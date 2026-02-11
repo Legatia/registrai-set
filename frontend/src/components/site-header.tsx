@@ -37,16 +37,7 @@ export function SiteHeader() {
             >
               Explorer
             </Link>
-            <Link
-              href="/register"
-              className={
-                pathname === "/register"
-                  ? "text-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground"
-              }
-            >
-              Register
-            </Link>
+
           </nav>
         </div>
         <button
@@ -54,9 +45,8 @@ export function SiteHeader() {
           className="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent"
         >
           <span
-            className={`inline-block h-2 w-2 rounded-full ${
-              network === "mainnet" ? "bg-green-500" : "bg-yellow-500"
-            }`}
+            className={`inline-block h-2 w-2 rounded-full ${network === "mainnet" ? "bg-green-500" : "bg-yellow-500"
+              }`}
           />
           {network === "mainnet" ? "Mainnet" : "Testnet"}
         </button>

@@ -13,28 +13,28 @@ export function Hero() {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-500 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
                     </span>
-                    Live on Base Sepolia & Eth Sepolia
+                    Indexing 20+ EVM Chains
                 </div>
 
                 <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-zinc-900 mb-6 font-outfit">
-                    The Master Registry for <br className="hidden md:block" />
+                    The Trust Layer for <br className="hidden md:block" />
                     <span className="text-indigo-600">AI Agents</span>
                 </h1>
 
                 <p className="max-w-2xl mx-auto text-xl text-zinc-600 mb-10 leading-relaxed">
-                    RegistrAI is the decentralized trust layer for autonomous agents.
-                    Verify identity, track reputation, and discover the next generation of on-chain intelligence.
+                    RegistrAI aggregates identity and reputation data across the EVM ecosystem.
+                    Verify agent trust, track performance, and integrate via our KYA API.
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                    <Link href="/register">
+                    <Link href="/explorer">
                         <Button size="lg" className="rounded-full px-8 text-base shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 transition-all">
-                            Register an Agent <ArrowRight className="ml-2 h-4 w-4" />
+                            <Search className="mr-2 h-4 w-4" /> Explore Agents
                         </Button>
                     </Link>
-                    <Link href="/explorer">
+                    <Link href="/query">
                         <Button variant="outline" size="lg" className="rounded-full px-8 text-base bg-white/50 hover:bg-white border-zinc-200">
-                            View Explorer
+                            <Database className="mr-2 h-4 w-4" /> Query API
                         </Button>
                     </Link>
                 </div>
@@ -79,7 +79,7 @@ export function Hero() {
                     <div className="text-center mb-16">
                         <h2 className="text-3xl font-bold text-zinc-900 mb-4">How It Works</h2>
                         <p className="text-zinc-600 max-w-2xl mx-auto">
-                            RegistrAI simplifies the process of bringing AI agents on-chain.
+                            RegistrAI automatically indexes and scores autonomous agents across the blockchain ecosystem.
                         </p>
                     </div>
 
@@ -89,26 +89,26 @@ export function Hero() {
 
                         <div className="flex flex-col items-center text-center">
                             <div className="w-24 h-24 rounded-full bg-white border-4 border-indigo-50 flex items-center justify-center text-indigo-600 shadow-sm mb-6 z-10">
-                                <LayoutTemplate size={32} />
-                            </div>
-                            <h3 className="text-lg font-bold text-zinc-900 mb-2">1. Register</h3>
-                            <p className="text-sm text-zinc-600">Connect your wallet and mint a unique identity NFT for your AI agent.</p>
-                        </div>
-
-                        <div className="flex flex-col items-center text-center">
-                            <div className="w-24 h-24 rounded-full bg-white border-4 border-indigo-50 flex items-center justify-center text-indigo-600 shadow-sm mb-6 z-10">
                                 <Database size={32} />
                             </div>
-                            <h3 className="text-lg font-bold text-zinc-900 mb-2">2. Index</h3>
-                            <p className="text-sm text-zinc-600">Our decentralized relayer indexes your agent's metadata and activity.</p>
+                            <h3 className="text-lg font-bold text-zinc-900 mb-2">1. Automatic Indexing</h3>
+                            <p className="text-sm text-zinc-600">We continuously scan 20+ EVM chains to discover new ERC-8004 agents instantly.</p>
                         </div>
 
                         <div className="flex flex-col items-center text-center">
                             <div className="w-24 h-24 rounded-full bg-white border-4 border-indigo-50 flex items-center justify-center text-indigo-600 shadow-sm mb-6 z-10">
-                                <Search size={32} />
+                                <Activity size={32} />
                             </div>
-                            <h3 className="text-lg font-bold text-zinc-900 mb-2">3. Discover</h3>
-                            <p className="text-sm text-zinc-600">Users can verify your agent's history and interact with it safely.</p>
+                            <h3 className="text-lg font-bold text-zinc-900 mb-2">2. Unified Reputation</h3>
+                            <p className="text-sm text-zinc-600">We aggregate interaction data to calculate a single, cross-chain trust score.</p>
+                        </div>
+
+                        <div className="flex flex-col items-center text-center">
+                            <div className="w-24 h-24 rounded-full bg-white border-4 border-indigo-50 flex items-center justify-center text-indigo-600 shadow-sm mb-6 z-10">
+                                <ShieldCheck size={32} />
+                            </div>
+                            <h3 className="text-lg font-bold text-zinc-900 mb-2">3. Integration Ready</h3>
+                            <p className="text-sm text-zinc-600">Use our KYA API to verify agents before they interact with your protocol.</p>
                         </div>
                     </div>
                 </div>
