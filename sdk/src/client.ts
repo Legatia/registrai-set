@@ -43,6 +43,8 @@ import type {
 export class KYAClient {
   private readonly baseUrl: string;
   private readonly apiKey: string | undefined;
+  private readonly timeoutMs: number;
+  private readonly defaultHeaders: Record<string, string>;
   private readonly _fetch: typeof globalThis.fetch;
 
   constructor(config: KYAClientConfig = {}) {
@@ -51,6 +53,8 @@ export class KYAClient {
       "",
     );
     this.apiKey = config.apiKey;
+    this.timeoutMs = config.timeoutMs ?? 10000;
+    this.defaultHeaders = config.headers ?? {};
     this._fetch = config.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
@@ -61,25 +65,31 @@ export class KYAClient {
     path: string,
     body?: unknown,
   ): Promise<T> {
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...this.defaultHeaders };
 
     if (body !== undefined) {
       headers["Content-Type"] = "application/json";
     }
 
-    if (method !== "GET" && this.apiKey) {
+    if (this.apiKey) {
       headers["X-API-Key"] = this.apiKey;
     }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     let res: Response;
     try {
       res = await this._fetch(`${this.baseUrl}${path}`, {
         method,
         headers,
+        signal: controller.signal,
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch (err) {
       throw KYAError.networkError(err);
+    } finally {
+      clearTimeout(timeout);
     }
 
     if (!res.ok) {
@@ -91,6 +101,10 @@ export class KYAClient {
         message = res.statusText;
       }
       throw KYAError.fromStatus(res.status, message);
+    }
+
+    if (res.status === 204) {
+      return undefined as T;
     }
 
     return (await res.json()) as T;
@@ -279,14 +293,19 @@ export class KYAClient {
     const rawValue = Number(rep.unified.value);
     const decimals = rep.unified.decimals;
     const score = decimals > 0 ? rawValue / 10 ** decimals : rawValue;
-    const feedbackCount = Number(rep.unified.totalFeedbackCount);
+    const feedbackCountRaw = BigInt(rep.unified.totalFeedbackCount);
+    const minFeedbackRaw = BigInt(minFeedback);
+    const feedbackCount =
+      feedbackCountRaw > BigInt(Number.MAX_SAFE_INTEGER)
+        ? Number.MAX_SAFE_INTEGER
+        : Number(feedbackCountRaw);
 
-    if (feedbackCount < minFeedback) {
+    if (feedbackCountRaw < minFeedbackRaw) {
       return {
         trusted: false,
         score,
         feedbackCount,
-        reason: `Insufficient feedback: ${feedbackCount} < ${minFeedback} required`,
+        reason: `Insufficient feedback: ${feedbackCountRaw.toString()} < ${minFeedback} required`,
       };
     }
 

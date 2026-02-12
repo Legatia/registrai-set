@@ -103,7 +103,7 @@ export function AgentListTable({
                   <TableRow key={agent.masterAgentId} className="border-white/5 hover:bg-white/5 transition-colors">
                     <TableCell>
                       <Link
-                        href={`/?q=${encodeURIComponent(agent.masterAgentId)}`}
+                        href={`/query?q=${encodeURIComponent(agent.masterAgentId)}`}
                         className="font-mono text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-2"
                       >
                         <span className="w-2 h-2 rounded-full bg-primary/50 animate-pulse"></span>

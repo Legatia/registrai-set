@@ -8,7 +8,7 @@ import { useAgentList } from "@/lib/hooks/use-agent-events";
 
 export default function ExplorerPage() {
   const { stats, isLoading: isLoadingStats } = useStats();
-  const { agents, pagination, isLoading: isLoadingAgents, setParams } = useAgentList();
+  const { agents, pagination, isLoading: isLoadingAgents, error, setParams } = useAgentList();
 
   const handlePageChange = useCallback(
     (page: number) => {
@@ -37,6 +37,11 @@ export default function ExplorerPage() {
 
       <div>
         <h2 className="text-lg font-semibold mb-4">Registered Agents</h2>
+        {error && (
+          <p className="mb-4 text-sm text-red-400">
+            Failed to load agents: {error}
+          </p>
+        )}
         <AgentListTable
           agents={agents}
           pagination={pagination}

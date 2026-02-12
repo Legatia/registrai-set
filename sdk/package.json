@@ -4,6 +4,19 @@
   "description": "TypeScript SDK for the KYA (Know Your Agent) API — agent identity, reputation, feedback, and cross-chain linking",
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Start-Farcaster/registrai.git",
+    "directory": "sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/Start-Farcaster/registrai/issues"
+  },
+  "homepage": "https://github.com/Start-Farcaster/registrai/tree/main/sdk#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=18"
   },
@@ -29,6 +42,7 @@
     "build:esm": "tsc -p tsconfig.json",
     "build:cjs": "tsc -p tsconfig.cjs.json && echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
     "build": "rm -rf dist && npm run build:esm && npm run build:cjs",
+    "test": "npm run build && node --test \"test/**/*.test.mjs\"",
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {

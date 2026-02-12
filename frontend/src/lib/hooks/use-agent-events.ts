@@ -10,7 +10,7 @@ interface UseAgentListResult {
   pagination: Pagination | null;
   isLoading: boolean;
   error: string | null;
-  setParams: (params: ListAgentsParams) => void;
+  setParams: (params: Partial<ListAgentsParams>) => void;
 }
 
 export function useAgentList(
@@ -58,8 +58,8 @@ export function useAgentList(
     };
   }, [params, network]);
 
-  const updateParams = useCallback((newParams: ListAgentsParams) => {
-    setParams(newParams);
+  const updateParams = useCallback((newParams: Partial<ListAgentsParams>) => {
+    setParams((prev) => ({ ...prev, ...newParams }));
   }, []);
 
   return { agents, pagination, isLoading, error, setParams: updateParams };

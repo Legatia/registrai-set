@@ -7,8 +7,9 @@ const DEFAULT_CHUNK_SIZE = 10_000;
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1_000;
 const DELAY_BETWEEN_CHUNKS_MS = 200;
+const MIN_CHUNK_SIZE = 1;
 
-const CHUNK_SIZE = parseInt(process.env.SCAN_CHUNK_SIZE || String(DEFAULT_CHUNK_SIZE), 10);
+const GLOBAL_CHUNK_SIZE = parseInt(process.env.SCAN_CHUNK_SIZE || String(DEFAULT_CHUNK_SIZE), 10);
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -17,11 +18,11 @@ function sleep(ms: number): Promise<void> {
 function isRateLimitError(err: unknown): boolean {
   if (err && typeof err === "object") {
     const e = err as Record<string, unknown>;
-    const msg = String(e.message || e.shortMessage || "");
-    if (msg.includes("429") || msg.includes("rate") || msg.includes("capacity")) return true;
+    const msg = String(e.message || e.shortMessage || "").toLowerCase();
+    if (msg.includes("429") || msg.includes("rate") || msg.includes("capacity") || msg.includes("limit") || msg.includes("throttled") || msg.includes("too many")) return true;
     if (e.error && typeof e.error === "object") {
       const inner = e.error as Record<string, unknown>;
-      if (inner.code === 429) return true;
+      if (inner.code === 429 || inner.code === -32016) return true;
     }
   }
   return false;
@@ -71,10 +72,11 @@ export async function scanForNewAgents(
     );
 
     let start = fromBlock;
+    const baseChunkSize = chainConfig.chunkSize || GLOBAL_CHUNK_SIZE || DEFAULT_CHUNK_SIZE;
+    let currentChunkSize = Math.max(MIN_CHUNK_SIZE, baseChunkSize);
 
     while (start <= latestBlock) {
-      const chunkSize = chainConfig.chunkSize || DEFAULT_CHUNK_SIZE;
-      const end = Math.min(start + chunkSize - 1, latestBlock);
+      const end = Math.min(start + currentChunkSize - 1, latestBlock);
 
       let success = false;
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -115,10 +117,27 @@ export async function scanForNewAgents(
       }
 
       if (!success) {
-        log.warn(`[${chainConfig.name}] Skipping blocks ${start}-${end} after ${MAX_RETRIES} retries`);
+        if (currentChunkSize > MIN_CHUNK_SIZE) {
+          const previous = currentChunkSize;
+          currentChunkSize = Math.max(MIN_CHUNK_SIZE, Math.floor(currentChunkSize / 2));
+          log.warn(
+            `[${chainConfig.name}] Failed blocks ${start}-${end}; shrinking chunk ${previous} -> ${currentChunkSize} and retrying`
+          );
+          continue;
+        }
+
+        log.warn(
+          `[${chainConfig.name}] Failed block ${start} even at min chunk size; skipping this block to continue progress`
+        );
+        start += 1;
+        continue;
       }
 
       start = end + 1;
+      if (currentChunkSize < baseChunkSize) {
+        // Slowly recover chunk size after successful scans to improve throughput.
+        currentChunkSize = Math.min(baseChunkSize, currentChunkSize * 2);
+      }
 
       // Log progress every 100,000 blocks
       if (start % 100_000 === 0) {
@@ -162,42 +181,60 @@ export async function readReputations(
   // Throttle processing
   for (let i = 0; i < agentIds.length; i++) {
     const agentId = agentIds[i];
-    try {
-      // Get all clients for this agent (spread into regular array to avoid ethers read-only Result issues)
-      const clients: string[] = [...await registry.getClients(BigInt(agentId))];
+    let success = false;
 
-      // If no clients exist, agent has no feedback yet - skip getSummary
-      if (clients.length === 0) {
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        // Get all clients for this agent
+        const clients: string[] = [...await registry.getClients(BigInt(agentId))];
+
+        // If no clients exist, agent has no feedback yet - skip getSummary
+        if (clients.length === 0) {
+          results.push({
+            agentId,
+            summaryValue: 0n,
+            summaryValueDecimals: 0,
+            feedbackCount: 0n,
+          });
+          success = true;
+          break;
+        }
+
+        // Get unfiltered summary across all clients
+        const [count, summaryValue, decimals] = await registry.getSummary(
+          BigInt(agentId),
+          clients,
+          "",
+          ""
+        );
+
         results.push({
           agentId,
-          summaryValue: 0n,
-          summaryValueDecimals: 0,
-          feedbackCount: 0n,
+          summaryValue: summaryValue as bigint,
+          summaryValueDecimals: Number(decimals),
+          feedbackCount: count as bigint,
         });
-        continue;
+        success = true;
+        break;
+      } catch (err: any) {
+        if (isRateLimitError(err) && attempt < MAX_RETRIES - 1) {
+          const backoff = INITIAL_BACKOFF_MS * 2 ** attempt;
+          log.warn(`[${chainConfig.name}] Rate limited reading reputation for agent ${agentId}, retrying in ${backoff}ms...`);
+          await sleep(backoff);
+        } else {
+          const msg = err?.message || err?.shortMessage || "";
+          if (msg.includes("missing revert data") || err?.code === "CALL_EXCEPTION") {
+            log.warn(`[${chainConfig.name}] Agent ${agentId}: Contract call reverted (not initialized or pruned data?)`);
+          } else {
+            log.warn(`[${chainConfig.name}] Failed to read reputation for agent ${agentId} after ${attempt + 1} attempts:`, err);
+          }
+          break;
+        }
       }
+    }
 
-      // Get unfiltered summary across all clients
-      const [count, summaryValue, decimals] = await registry.getSummary(
-        BigInt(agentId),
-        clients,
-        "",
-        ""
-      );
-
-      results.push({
-        agentId,
-        summaryValue: summaryValue as bigint,
-        summaryValueDecimals: Number(decimals),
-        feedbackCount: count as bigint,
-      });
-    } catch (err: any) {
-      const msg = err?.message || err?.shortMessage || "";
-      if (msg.includes("missing revert data") || err?.code === "CALL_EXCEPTION") {
-        log.warn(`[${chainConfig.name}] Agent ${agentId}: Contract call reverted (not initialized or pruned data?)`);
-      } else {
-        log.warn(`[${chainConfig.name}] Failed to read reputation for agent ${agentId}:`, err);
-      }
+    if (!success) {
+      log.warn(`[${chainConfig.name}] Skipping reputation for agent ${agentId} after ${MAX_RETRIES} attempts`);
     }
 
     // Throttle between items to avoid rate limits

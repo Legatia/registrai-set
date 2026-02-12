@@ -296,19 +296,28 @@ async function runCycle(
 
   const results = await Promise.allSettled(chains.map(chain => {
     const provider = l2Providers.get(chain.chainId)!;
-    return processChain(chain, provider, state);
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Timed out after 300s")), 300_000)
+    );
+    return Promise.race([
+      processChain(chain, provider, state),
+      timeout
+    ]);
   }));
 
   // Aggregate results for Unified Reputation calculation
   let totalNew = 0;
   const allUpdatedMasterIds = new Set<string>();
 
-  for (const res of results) {
+  results.forEach((res, index) => {
+    const chain = chains[index];
     if (res.status === "fulfilled") {
       totalNew += res.value.newRegistrations;
       res.value.updatedAgentIds.forEach(id => allUpdatedMasterIds.add(id));
+    } else {
+      log.error(`[${chain.name}] Cycle failed:`, res.reason);
     }
-  }
+  });
 
   // ── Step 3: Recompute unified reputation for impacted agents ──────────
   if (allUpdatedMasterIds.size > 0) {

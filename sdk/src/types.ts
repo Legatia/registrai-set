@@ -323,6 +323,8 @@ export interface TrustCheckOptions {
 export interface KYAClientConfig {
   baseUrl?: string;
   apiKey?: string;
+  timeoutMs?: number;
+  headers?: Record<string, string>;
   fetch?: typeof globalThis.fetch;
 }
 

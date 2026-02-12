@@ -108,33 +108,33 @@ export function loadConfig(): IndexerConfig {
   }
 
   // Testnet support
-  // if (process.env.POLYGON_RPC_URL) {
-  //   chains.push({
-  //     chainId: 137,
-  //     name: "Polygon",
-  //     rpcUrl: process.env.POLYGON_RPC_URL,
-  //     identityRegistry: process.env.POLYGON_IDENTITY_REGISTRY || DEFAULT_IDENTITY_REGISTRY,
-  //     reputationRegistry: process.env.POLYGON_REPUTATION_REGISTRY || DEFAULT_REPUTATION_REGISTRY,
-  //     isTestnet: false,
-  //     fromBlock: parseInt(process.env.POLYGON_FROM_BLOCK || "0", 10),
-  //     chunkSize: 50, // Reduced to 50 due to strict RPC limits
-  //     scanDelay: 2000,
-  //   });
-  // }
+  if (process.env.POLYGON_RPC_URL) {
+    chains.push({
+      chainId: 137,
+      name: "Polygon",
+      rpcUrl: process.env.POLYGON_RPC_URL,
+      identityRegistry: process.env.POLYGON_IDENTITY_REGISTRY || DEFAULT_IDENTITY_REGISTRY,
+      reputationRegistry: process.env.POLYGON_REPUTATION_REGISTRY || DEFAULT_REPUTATION_REGISTRY,
+      isTestnet: false,
+      fromBlock: parseInt(process.env.POLYGON_FROM_BLOCK || "0", 10),
+      chunkSize: 50, // Reduced to 50 due to strict RPC limits
+      scanDelay: 2000,
+    });
+  }
 
-  // if (process.env.BSC_RPC_URL) {
-  //   chains.push({
-  //     chainId: 56,
-  //     name: "BNB Smart Chain",
-  //     rpcUrl: process.env.BSC_RPC_URL,
-  //     identityRegistry: process.env.BSC_IDENTITY_REGISTRY || DEFAULT_IDENTITY_REGISTRY,
-  //     reputationRegistry: process.env.BSC_REPUTATION_REGISTRY || DEFAULT_REPUTATION_REGISTRY,
-  //     isTestnet: false,
-  //     fromBlock: parseInt(process.env.BSC_FROM_BLOCK || "0", 10),
-  //     chunkSize: 100,
-  //     scanDelay: 2500, // Extra slow for BNB
-  //   });
-  // }
+  if (process.env.BSC_RPC_URL) {
+    chains.push({
+      chainId: 56,
+      name: "BNB Smart Chain",
+      rpcUrl: process.env.BSC_RPC_URL,
+      identityRegistry: process.env.BSC_IDENTITY_REGISTRY || DEFAULT_IDENTITY_REGISTRY,
+      reputationRegistry: process.env.BSC_REPUTATION_REGISTRY || DEFAULT_REPUTATION_REGISTRY,
+      isTestnet: false,
+      fromBlock: parseInt(process.env.BSC_FROM_BLOCK || "0", 10),
+      chunkSize: 100,
+      scanDelay: 2500, // Extra slow for BNB
+    });
+  }
 
   if (process.env.AVALANCHE_RPC_URL) {
     chains.push({

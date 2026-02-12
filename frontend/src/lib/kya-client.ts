@@ -468,7 +468,7 @@ export class KYAClient {
             headers["Content-Type"] = "application/json";
         }
 
-        if (method !== "GET" && this.apiKey) {
+        if (this.apiKey) {
             headers["X-API-Key"] = this.apiKey;
         }
 
