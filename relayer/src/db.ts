@@ -184,16 +184,34 @@ export async function upsertReputationLatest(
   summaryValueDecimals: number,
   feedbackCount: string
 ): Promise<void> {
-  await execute(
-    `INSERT INTO reputation_latest (master_agent_id, chain_id, summary_value, summary_value_decimals, feedback_count)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(master_agent_id, chain_id) DO UPDATE SET
-       summary_value = excluded.summary_value,
-       summary_value_decimals = excluded.summary_value_decimals,
-       feedback_count = excluded.feedback_count,
-       updated_at = unixepoch()`,
-    [masterAgentId, chainId, summaryValue, summaryValueDecimals, feedbackCount]
+  const agentExists = await queryFirst<{ x: number }>(
+    "SELECT 1 as x FROM agents WHERE master_agent_id = ?",
+    [masterAgentId]
   );
+
+  if (!agentExists) {
+    log.warn(`Skipping reputation update for missing agent: ${masterAgentId}`);
+    return;
+  }
+
+  try {
+    await execute(
+      `INSERT INTO reputation_latest (master_agent_id, chain_id, summary_value, summary_value_decimals, feedback_count)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(master_agent_id, chain_id) DO UPDATE SET
+         summary_value = excluded.summary_value,
+         summary_value_decimals = excluded.summary_value_decimals,
+         feedback_count = excluded.feedback_count,
+         updated_at = unixepoch()`,
+      [masterAgentId, chainId, summaryValue, summaryValueDecimals, feedbackCount]
+    );
+  } catch (err: any) {
+    if (err.message.includes("FOREIGN KEY constraint failed")) {
+      log.warn(`Foreign key failure for agent ${masterAgentId} (likely missing from 'agents' table). Skipping.`);
+      return;
+    }
+    throw err;
+  }
 }
 
 export function buildReputationSnapshotStmt(
@@ -273,8 +291,16 @@ export async function insertReputationSnapshot(
   }
 
   const stmt = buildReputationSnapshotStmt(masterAgentId, chainId, summaryValue, summaryValueDecimals, feedbackCount);
-  await execute(stmt.sql, stmt.params);
-  return true;
+  try {
+    await execute(stmt.sql, stmt.params);
+    return true;
+  } catch (err: any) {
+    if (err.message.includes("FOREIGN KEY constraint failed")) {
+      log.warn(`Foreign key failure for agent snapshot ${masterAgentId}. Skipping.`);
+      return false;
+    }
+    throw err;
+  }
 }
 
 export async function updateUnifiedReputation(

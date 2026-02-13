@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Outfit, JetBrains_Mono } from "next/font/google";
-import { SiteHeader } from "@/components/site-header"
+import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { NetworkProvider } from "@/lib/network-context";
 import Ballpit from "@/components/Ballpit";
 import "./globals.css";
@@ -19,6 +20,19 @@ export const metadata: Metadata = {
   title: "RegistrAI — ERC-8004 Agent Explorer",
   description:
     "Look up AI agent identities and reputations across chains via the ERC-8004 MasterRegistry.",
+  icons: {
+    icon: [
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
+  openGraph: {
+    title: "RegistrAI — ERC-8004 Agent Explorer",
+    description:
+      "Look up AI agent identities and reputations across chains via the ERC-8004 MasterRegistry.",
+    images: ["/logo.png"],
+  },
 };
 
 export default function RootLayout({
@@ -43,6 +57,7 @@ export default function RootLayout({
             </div>
             <SiteHeader />
             <main className="flex-1 container mx-auto px-4 py-8 relative z-10">{children}</main>
+            <SiteFooter />
           </div>
         </NetworkProvider>
       </body>

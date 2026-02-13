@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { useNetwork } from "@/lib/network-context";
@@ -13,7 +14,14 @@ export function SiteHeader() {
     <header className="border-b relative z-20 bg-background/80 backdrop-blur-sm">
       <div className="container mx-auto flex h-14 items-center justify-between px-4">
         <div className="flex items-center gap-6">
-          <Link href="/" className="font-semibold tracking-tight">
+          <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
+            <Image
+              src="/logo.png"
+              alt="RegistrAI logo"
+              width={28}
+              height={28}
+              className="rounded-md"
+            />
             Registr<span className="text-primary">AI</span>
           </Link>
           <nav className="flex items-center gap-4 text-sm">
