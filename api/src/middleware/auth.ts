@@ -1,5 +1,6 @@
 import type { Context, Next } from "hono";
 import type { AppEnv } from "../env.js";
+import { writeAuditLog } from "../audit.js";
 
 interface ApiKeyRow {
   key: string;
@@ -14,14 +15,25 @@ interface AuthContext {
 }
 
 /**
- * Auth middleware: validates developer API keys for all endpoints.
- * OPTIONS passes through for CORS preflight. Everything else requires
- * a valid, non-revoked key from the api_keys table OR the legacy API_KEY env var.
+ * Auth middleware: validates developer API keys.
+ * - OPTIONS always passes through.
+ * - GET requests are public, but attach developer context if a valid X-API-Key is provided.
+ * - Non-GET requests require a valid developer key.
  */
 export function apiKeyAuth() {
   return async (c: Context<AppEnv>, next: Next) => {
-    // CORS preflight always passes
-    if (c.req.method === "OPTIONS") {
+    const method = c.req.method;
+    const isReadOnly = method === "GET" || method === "OPTIONS";
+
+    if (method === "OPTIONS") {
+      return next();
+    }
+
+    // Public non-custodial registration writes do not require developer API keys.
+    if (
+      method === "POST" &&
+      (c.req.path === "/agents/register/build" || c.req.path === "/agents/register/confirm")
+    ) {
       return next();
     }
 
@@ -29,6 +41,19 @@ export function apiKeyAuth() {
     let auth: AuthContext | null = null;
     if (headerKey) {
       auth = await authenticateApiKey(c, headerKey);
+    }
+
+    // Public reads: continue even without API key; attach context when key is valid.
+    if (isReadOnly) {
+      if (auth) {
+        c.set("apiKey", auth.apiKey);
+        c.set("developerId", auth.developerId);
+      }
+      await next();
+      if (auth) {
+        await logUsage(c, auth.apiKey);
+      }
+      return;
     }
 
     if (!auth) {
@@ -82,9 +107,22 @@ export function adminAuth() {
     if (!adminKey) {
       return c.json({ error: "Admin endpoints not configured" }, 503);
     }
-    if (c.req.header("X-Admin-Key") !== adminKey) {
+    const receivedKey = c.req.header("X-Admin-Key");
+    if (receivedKey !== adminKey) {
+      await writeAuditLog(c.env.DB, {
+        actorType: "system",
+        actorId: "auth",
+        action: "admin_auth.failed",
+        targetType: "route",
+        targetId: c.req.path,
+        metadata: {
+          ip: c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For") || "unknown",
+          method: c.req.method,
+        },
+      });
       return c.json({ error: "Unauthorized — invalid admin key" }, 401);
     }
+    c.set("adminActor", `admin:${adminKey.slice(0, 6)}`);
     return next();
   };
 }

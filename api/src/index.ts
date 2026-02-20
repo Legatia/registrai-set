@@ -11,44 +11,56 @@ import { feedbackRoutes } from "./routes/feedback.js";
 import { developerRoutes } from "./routes/developers.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { presenceRoutes } from "./routes/presence.js";
+import { accountRoutes } from "./routes/account.js";
+import { adminRoutes } from "./routes/admin.js";
+import { organizationRoutes } from "./routes/organizations.js";
+import { billingRoutes } from "./routes/billing.js";
+import { registrationRoutes } from "./routes/registration.js";
 import { processDeliveryQueue, pollReputationChanges } from "./webhooks/dispatcher.js";
 import type { AppEnv } from "./env.js";
 
 const app = new Hono<AppEnv>();
+const publicApp = new Hono<AppEnv>();
+const adminApp = new Hono<AppEnv>();
+
+function resolveAllowedOrigins(env: AppEnv["Bindings"]): string[] | "*" {
+  const raw = env.CORS_ORIGINS?.trim();
+  if (!raw) return "*";
+  const origins = raw
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+  return origins.length > 0 ? origins : "*";
+}
 
 app.use(
   "*",
-  cors({
-    origin: "*",
-    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "X-API-Key", "X-Admin-Key"],
-    maxAge: 86400,
-  })
+  async (c, next) =>
+    cors({
+      origin: resolveAllowedOrigins(c.env),
+      allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+      allowHeaders: ["Content-Type", "X-API-Key", "X-Admin-Key"],
+      maxAge: 86400,
+    })(c, next)
 );
 
-// Developer key auth for write endpoints (skip admin-only /developers paths)
-app.use("*", async (c, next) => {
-  if (c.req.path.startsWith("/developers")) return next();
-  return apiKeyAuth()(c, next);
-});
-app.use("*", async (c, next) => {
-  if (c.req.path.startsWith("/developers")) return next();
-  return dailyQuota()(c, next);
-});
+// Public/developer middleware stack
+publicApp.use("*", apiKeyAuth());
+publicApp.use("*", dailyQuota());
 
-// Global write-rate limit for all mutating operations (skip admin paths)
-app.use("*", async (c, next) => {
-  if (c.req.path.startsWith("/developers")) return next();
-  return createRateLimiter({
+// Global write-rate limit for all mutating public/developer operations
+publicApp.use(
+  "*",
+  createRateLimiter({
     bucket: "global_write",
     limit: 120,
     windowSeconds: 60,
     methods: ["POST", "PATCH", "DELETE"],
-  })(c, next);
-});
+  })
+);
 
 // Stricter limits for high-cost or abuse-prone endpoints
-app.use(
+publicApp.use(
   "/agents/:id/feedback/build",
   createRateLimiter({
     bucket: "feedback_build",
@@ -57,7 +69,7 @@ app.use(
     methods: ["POST"],
   })
 );
-app.use(
+publicApp.use(
   "/agents/:id/feedback",
   createRateLimiter({
     bucket: "feedback_submit",
@@ -66,7 +78,7 @@ app.use(
     methods: ["POST"],
   })
 );
-app.use(
+publicApp.use(
   "/agents/link",
   createRateLimiter({
     bucket: "link_post",
@@ -75,7 +87,7 @@ app.use(
     methods: ["POST"],
   })
 );
-app.use(
+publicApp.use(
   "/agents/:id/presence",
   createRateLimiter({
     bucket: "presence_post",
@@ -84,20 +96,107 @@ app.use(
     methods: ["POST"],
   })
 );
+publicApp.use(
+  "/agents/register/build",
+  createRateLimiter({
+    bucket: "register_build",
+    limit: 20,
+    windowSeconds: 60,
+    methods: ["POST"],
+  })
+);
+publicApp.use(
+  "/agents/register/confirm",
+  createRateLimiter({
+    bucket: "register_confirm",
+    limit: 20,
+    windowSeconds: 60,
+    methods: ["POST"],
+  })
+);
+publicApp.use(
+  "/me/keys",
+  createRateLimiter({
+    bucket: "developer_keys_write",
+    limit: 20,
+    windowSeconds: 60,
+    methods: ["POST", "DELETE"],
+  })
+);
+publicApp.use(
+  "/me/keys/*",
+  createRateLimiter({
+    bucket: "developer_keys_write",
+    limit: 20,
+    windowSeconds: 60,
+    methods: ["POST", "DELETE"],
+  })
+);
 
-// Public + auth-protected routes
-app.route("/", healthRoutes);
-app.route("/", statsRoutes);
-app.route("/", agentsRoutes);
-app.route("/", linkRoutes);
-app.route("/", feedbackRoutes);
-app.route("/", presenceRoutes);
-app.route("/", webhookRoutes);
+// Public + developer-auth routes
+publicApp.route("/", healthRoutes);
+publicApp.route("/", statsRoutes);
+publicApp.route("/", agentsRoutes);
+publicApp.route("/", linkRoutes);
+publicApp.route("/", feedbackRoutes);
+publicApp.route("/", presenceRoutes);
+publicApp.route("/", webhookRoutes);
+publicApp.route("/", accountRoutes);
+publicApp.route("/", registrationRoutes);
 
-// Admin-protected developer management routes
-const adminApp = new Hono<AppEnv>();
+// Admin-only routes
 adminApp.use("*", adminAuth());
+adminApp.use(
+  "*",
+  createRateLimiter({
+    bucket: "admin_all",
+    limit: 120,
+    windowSeconds: 60,
+    methods: ["GET", "POST", "PATCH", "DELETE"],
+  })
+);
+adminApp.use(
+  "/developers",
+  createRateLimiter({
+    bucket: "admin_developers",
+    limit: 30,
+    windowSeconds: 60,
+    methods: ["GET", "POST", "PATCH", "DELETE"],
+  })
+);
+adminApp.use(
+  "/developers/*",
+  createRateLimiter({
+    bucket: "admin_developers",
+    limit: 30,
+    windowSeconds: 60,
+    methods: ["GET", "POST", "PATCH", "DELETE"],
+  })
+);
+adminApp.use(
+  "/organizations",
+  createRateLimiter({
+    bucket: "admin_organizations",
+    limit: 30,
+    windowSeconds: 60,
+    methods: ["GET", "POST", "PATCH", "DELETE"],
+  })
+);
+adminApp.use(
+  "/organizations/*",
+  createRateLimiter({
+    bucket: "admin_organizations",
+    limit: 30,
+    windowSeconds: 60,
+    methods: ["GET", "POST", "PATCH", "DELETE"],
+  })
+);
 adminApp.route("/", developerRoutes);
+adminApp.route("/", organizationRoutes);
+adminApp.route("/", adminRoutes);
+adminApp.route("/", billingRoutes);
+
+app.route("/", publicApp);
 app.route("/", adminApp);
 
 // Cloudflare Workers export

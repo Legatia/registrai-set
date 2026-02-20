@@ -3,7 +3,6 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
 import { useNetwork } from "@/lib/network-context";
 
 export function SiteHeader() {
@@ -44,6 +43,46 @@ export function SiteHeader() {
               }
             >
               Explorer
+            </Link>
+            <Link
+              href="/register"
+              className={
+                pathname === "/register"
+                  ? "text-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground"
+              }
+            >
+              Register
+            </Link>
+            <Link
+              href="/api-docs"
+              className={
+                pathname === "/api-docs"
+                  ? "text-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground"
+              }
+            >
+              API
+            </Link>
+            <Link
+              href="/dashboard"
+              className={
+                pathname === "/dashboard"
+                  ? "text-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground"
+              }
+            >
+              Admin
+            </Link>
+            <Link
+              href="/dashboard/developer"
+              className={
+                pathname === "/dashboard/developer"
+                  ? "text-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground"
+              }
+            >
+              Developer
             </Link>
 
           </nav>

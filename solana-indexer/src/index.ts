@@ -13,7 +13,6 @@ import {
   getSyncCursor,
   insertSatiAttestation,
   insertEvmLink,
-  getDb,
   queryFirst,
   queryAll
 } from "./db.js";
@@ -287,18 +286,15 @@ async function runCycle(connection: Connection, config: SolanaIndexerConfig): Pr
 }
 
 async function main(): Promise<void> {
-  // @ts-ignore
   const config = loadConfig();
 
   log.info("SATI Solana Indexer starting");
   log.info(`  Cluster:    ${config.cluster} (chain ID ${config.chainId})`);
   log.info(`  Program:    ${config.satiProgramId}`);
   log.info(`  RPC:        ${config.rpcUrl}`);
-  // @ts-ignore
   log.info(`  DB:         ${config.d1.databaseId} (D1)`);
   log.info(`  Poll:       ${config.pollIntervalSeconds}s`);
 
-  // @ts-ignore
   initDatabase(config.d1);
   const connection = new Connection(config.rpcUrl, "confirmed");
 

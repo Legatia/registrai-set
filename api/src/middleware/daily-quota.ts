@@ -1,24 +1,17 @@
 import type { Context, Next } from "hono";
 import type { AppEnv } from "../env.js";
-
-interface QuotaConfig {
-  totalPerDay: number;
-  writePerDay: number;
-  feedbackSubmitPerDay: number;
-}
-
-const DEFAULT_QUOTA: QuotaConfig = {
-  totalPerDay: 10_000,
-  writePerDay: 2_000,
-  feedbackSubmitPerDay: 500,
-};
-
-interface CountRow {
-  cnt: number;
-}
+import {
+  DEFAULT_QUOTA,
+  type QuotaConfig,
+  getEffectiveQuotaForDeveloper,
+  getQuotaSnapshot,
+  isFeedbackSubmitRoute,
+  isWriteMethod,
+} from "../quota.js";
 
 export function dailyQuota(config: Partial<QuotaConfig> = {}) {
   const quota: QuotaConfig = { ...DEFAULT_QUOTA, ...config };
+  const hasOverride = Object.keys(config).length > 0;
 
   return async (c: Context<AppEnv>, next: Next) => {
     const apiKey = c.get("apiKey");
@@ -33,50 +26,32 @@ export function dailyQuota(config: Partial<QuotaConfig> = {}) {
       return next();
     }
 
-    const now = Math.floor(Date.now() / 1000);
-    const dayStart = now - (now % 86400);
-    const dayEnd = dayStart + 86400;
+    const effective = !hasOverride ? await getEffectiveQuotaForDeveloper(c.env.DB, developerId) : { quota, plan: null };
+    const appliedQuota = effective.quota;
+    const snapshot = await getQuotaSnapshot(c.env.DB, apiKey, appliedQuota);
+    const isWrite = isWriteMethod(c.req.method);
+    const isFeedbackSubmit = isFeedbackSubmitRoute(c.req.method, c.req.path);
 
-    const isWrite = c.req.method === "POST" || c.req.method === "PATCH" || c.req.method === "DELETE";
-    const isFeedbackSubmit = c.req.method === "POST" && /^\/agents\/[^/]+\/feedback$/.test(c.req.path);
-
-    // Count prior usage for this UTC day from api_usage.
-    const [totalRow, writeRow, feedbackRow] = await c.env.DB.batch([
-      c.env.DB
-        .prepare("SELECT COUNT(*) as cnt FROM api_usage WHERE api_key = ? AND recorded_at >= ? AND recorded_at < ?")
-        .bind(apiKey, dayStart, dayEnd),
-      c.env.DB
-        .prepare(
-          "SELECT COUNT(*) as cnt FROM api_usage WHERE api_key = ? AND method IN ('POST','PATCH','DELETE') AND recorded_at >= ? AND recorded_at < ?"
-        )
-        .bind(apiKey, dayStart, dayEnd),
-      c.env.DB
-        .prepare(
-          "SELECT COUNT(*) as cnt FROM api_usage WHERE api_key = ? AND method = 'POST' AND path GLOB '/agents/*/feedback' AND recorded_at >= ? AND recorded_at < ?"
-        )
-        .bind(apiKey, dayStart, dayEnd),
-    ]);
-
-    const totalUsed = ((totalRow.results[0] as CountRow | undefined)?.cnt ?? 0);
-    const writeUsed = ((writeRow.results[0] as CountRow | undefined)?.cnt ?? 0);
-    const feedbackUsed = ((feedbackRow.results[0] as CountRow | undefined)?.cnt ?? 0);
-
-    if (totalUsed >= quota.totalPerDay) {
-      return quotaExceeded(c, "total_daily", quota.totalPerDay, 0, dayEnd - now);
+    if (snapshot.totalUsed >= appliedQuota.totalPerDay) {
+      return quotaExceeded(c, "total_daily", appliedQuota.totalPerDay, 0, snapshot.dayEnd - snapshot.now);
     }
 
-    if (isWrite && writeUsed >= quota.writePerDay) {
-      return quotaExceeded(c, "write_daily", quota.writePerDay, 0, dayEnd - now);
+    if (isWrite && snapshot.writeUsed >= appliedQuota.writePerDay) {
+      return quotaExceeded(c, "write_daily", appliedQuota.writePerDay, 0, snapshot.dayEnd - snapshot.now);
     }
 
-    if (isFeedbackSubmit && feedbackUsed >= quota.feedbackSubmitPerDay) {
-      return quotaExceeded(c, "feedback_submit_daily", quota.feedbackSubmitPerDay, 0, dayEnd - now);
+    if (isFeedbackSubmit && snapshot.feedbackUsed >= appliedQuota.feedbackSubmitPerDay) {
+      return quotaExceeded(c, "feedback_submit_daily", appliedQuota.feedbackSubmitPerDay, 0, snapshot.dayEnd - snapshot.now);
     }
 
-    const remaining = Math.max(0, quota.totalPerDay - totalUsed - 1);
-    const writeRemaining = Math.max(0, quota.writePerDay - writeUsed - (isWrite ? 1 : 0));
-    const feedbackRemaining = Math.max(0, quota.feedbackSubmitPerDay - feedbackUsed - (isFeedbackSubmit ? 1 : 0));
-    setQuotaHeaders(c, quota, remaining, writeRemaining, feedbackRemaining, dayEnd);
+    if (effective.plan) {
+      c.header("X-Plan-Slug", effective.plan.slug);
+    }
+
+    const totalRemaining = Math.max(0, snapshot.totalRemaining - 1);
+    const writeRemaining = Math.max(0, snapshot.writeRemaining - (isWrite ? 1 : 0));
+    const feedbackRemaining = Math.max(0, snapshot.feedbackRemaining - (isFeedbackSubmit ? 1 : 0));
+    setQuotaHeaders(c, appliedQuota, totalRemaining, writeRemaining, feedbackRemaining, snapshot.dayEnd);
 
     return next();
   };

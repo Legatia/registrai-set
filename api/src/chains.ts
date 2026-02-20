@@ -48,12 +48,29 @@ export const REPUTATION_REGISTRIES: Record<number, string> = {
   84532: "0x8004B663056A597Dffe9eCcC1965A193B7388713",
 };
 
+export const IDENTITY_REGISTRIES: Record<number, string> = {
+  1: "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
+  8453: "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
+  42161: "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
+  10: "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
+  11155111: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+  84532: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+};
+
 export function getReputationRegistry(chainId: number): string | undefined {
   return REPUTATION_REGISTRIES[chainId];
 }
 
 export function isEvmChain(chainId: number): boolean {
   return chainId in REPUTATION_REGISTRIES;
+}
+
+export function getIdentityRegistry(chainId: number): string | undefined {
+  return IDENTITY_REGISTRIES[chainId];
+}
+
+export function isIdentityChain(chainId: number): boolean {
+  return chainId in IDENTITY_REGISTRIES;
 }
 
 export const MAINNET_CHAINS = [

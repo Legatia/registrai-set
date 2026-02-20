@@ -45,6 +45,8 @@ Thumbs.db
 *.log
 coverage/
 .nyc_output/
+api/backups/
+api/backups/**/manifest.txt
 
 proposals/
 .wrangler/

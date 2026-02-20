@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { generateId, generateSecret } from "../db.js";
 import type { AppEnv } from "../env.js";
+import { writeAuditLog } from "../audit.js";
 
 export const webhookRoutes = new Hono<AppEnv>();
 
@@ -83,6 +84,15 @@ webhookRoutes.post("/webhooks", async (c) => {
   await c.env.DB.prepare(
     "INSERT INTO webhooks (id, developer_id, url, secret, events, agent_id) VALUES (?, ?, ?, ?, ?, ?)"
   ).bind(id, developerId, url, secret, events.join(","), agentId || null).run();
+
+  await writeAuditLog(c.env.DB, {
+    actorType: "developer",
+    actorId: developerId,
+    action: "webhook.created",
+    targetType: "webhook",
+    targetId: id,
+    metadata: { url, events, agentId: agentId || null },
+  });
 
   return c.json(
     {
@@ -205,6 +215,15 @@ webhookRoutes.patch("/webhooks/:id", async (c) => {
     "UPDATE webhooks SET url = ?, events = ?, active = ? WHERE id = ?"
   ).bind(url, events, active, id).run();
 
+  await writeAuditLog(db, {
+    actorType: "developer",
+    actorId: developerId,
+    action: "webhook.updated",
+    targetType: "webhook",
+    targetId: id,
+    metadata: { url, events: events.split(","), active: active === 1 },
+  });
+
   return c.json({
     id,
     url,
@@ -237,6 +256,14 @@ webhookRoutes.delete("/webhooks/:id", async (c) => {
 
   // Clean up deliveries
   await db.prepare("DELETE FROM webhook_deliveries WHERE webhook_id = ?").bind(id).run();
+
+  await writeAuditLog(db, {
+    actorType: "developer",
+    actorId: developerId,
+    action: "webhook.deleted",
+    targetType: "webhook",
+    targetId: id,
+  });
 
   return c.json({ message: "Webhook deleted" });
 });

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { generateId, generateApiKey } from "../db.js";
 import type { AppEnv } from "../env.js";
+import { writeAuditLog } from "../audit.js";
 
 export const developerRoutes = new Hono<AppEnv>();
 
@@ -18,7 +19,56 @@ interface ApiKeyRow {
   scopes: string;
   revoked_at: number | null;
   created_at: number;
+  last_used_at: number | null;
 }
+
+interface WebhookRow {
+  id: string;
+  url: string;
+  events: string;
+  active: number;
+  created_at: number;
+}
+
+// ── GET /developers — List developers (admin) ─────────────────
+
+developerRoutes.get("/developers", async (c) => {
+  const limit = Math.min(200, Math.max(1, parseInt(c.req.query("limit") || "50", 10)));
+  const page = Math.max(1, parseInt(c.req.query("page") || "1", 10));
+  const offset = (page - 1) * limit;
+
+  const db = c.env.DB;
+  const [countRow, result] = await db.batch([
+    db.prepare("SELECT COUNT(*) as cnt FROM developers"),
+    db.prepare(
+      `SELECT d.id, d.name, d.email, d.created_at,
+              COUNT(k.key) as key_count
+       FROM developers d
+       LEFT JOIN api_keys k ON k.developer_id = d.id AND k.revoked_at IS NULL
+       GROUP BY d.id
+       ORDER BY d.created_at DESC
+       LIMIT ? OFFSET ?`
+    ).bind(limit, offset),
+  ]);
+
+  const total = ((countRow.results[0] as { cnt?: number } | undefined)?.cnt) ?? 0;
+
+  return c.json({
+    developers: result.results.map((r) => ({
+      id: (r as any).id,
+      name: (r as any).name,
+      email: (r as any).email,
+      createdAt: (r as any).created_at,
+      activeKeyCount: (r as any).key_count ?? 0,
+    })),
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  });
+});
 
 // ── POST /developers — Register developer ────────────────────
 
@@ -41,6 +91,7 @@ developerRoutes.post("/developers", async (c) => {
   }
 
   const db = c.env.DB;
+  const adminActor = c.get("adminActor") || "admin";
   const devId = generateId();
   const apiKey = generateApiKey();
   const trimmedName = name.trim();
@@ -57,6 +108,15 @@ developerRoutes.post("/developers", async (c) => {
     }
     throw err;
   }
+
+  await writeAuditLog(db, {
+    actorType: "admin",
+    actorId: adminActor,
+    action: "developer.created",
+    targetType: "developer",
+    targetId: devId,
+    metadata: { email: trimmedEmail },
+  });
 
   return c.json({ id: devId, name: trimmedName, email: trimmedEmail, apiKey }, 201);
 });
@@ -84,6 +144,7 @@ developerRoutes.post("/developers/:id/keys", async (c) => {
   } catch { /* body is optional */ }
 
   const db = c.env.DB;
+  const adminActor = c.get("adminActor") || "admin";
   const dev = await db.prepare("SELECT id FROM developers WHERE id = ?").bind(id).first<{ id: string }>();
   if (!dev) {
     return c.json({ error: "Developer not found" }, 404);
@@ -96,6 +157,15 @@ developerRoutes.post("/developers/:id/keys", async (c) => {
   await db.prepare(
     "INSERT INTO api_keys (key, developer_id, label, scopes) VALUES (?, ?, ?, ?)"
   ).bind(apiKey, id, label, scopes).run();
+
+  await writeAuditLog(db, {
+    actorType: "admin",
+    actorId: adminActor,
+    action: "api_key.created",
+    targetType: "api_key",
+    targetId: apiKey,
+    metadata: { developerId: id, label, scopes, source: "admin_dashboard" },
+  });
 
   return c.json({ key: apiKey, developerId: id, label, scopes }, 201);
 });
@@ -112,18 +182,54 @@ developerRoutes.get("/developers/:id/keys", async (c) => {
   }
 
   const { results: keys } = await db
-    .prepare("SELECT key, label, scopes, revoked_at, created_at FROM api_keys WHERE developer_id = ? ORDER BY created_at DESC")
+    .prepare(
+      `SELECT k.key, k.label, k.scopes, k.revoked_at, k.created_at, MAX(u.recorded_at) as last_used_at
+       FROM api_keys k
+       LEFT JOIN api_usage u ON u.api_key = k.key
+       WHERE k.developer_id = ?
+       GROUP BY k.key
+       ORDER BY k.created_at DESC`
+    )
     .bind(id)
     .all<ApiKeyRow>();
 
   return c.json({
     keys: keys.map((k) => ({
+      keyId: k.key,
       key: k.key.slice(0, 8) + "..." + k.key.slice(-4),
       label: k.label,
       scopes: k.scopes,
       active: k.revoked_at === null,
       createdAt: k.created_at,
       revokedAt: k.revoked_at,
+      lastUsedAt: k.last_used_at,
+    })),
+  });
+});
+
+// ── GET /developers/:id/webhooks — List developer webhooks (admin) ─────
+
+developerRoutes.get("/developers/:id/webhooks", async (c) => {
+  const id = c.req.param("id");
+  const db = c.env.DB;
+
+  const dev = await db.prepare("SELECT id FROM developers WHERE id = ?").bind(id).first<{ id: string }>();
+  if (!dev) {
+    return c.json({ error: "Developer not found" }, 404);
+  }
+
+  const { results: rows } = await db
+    .prepare("SELECT id, url, events, active, created_at FROM webhooks WHERE developer_id = ? ORDER BY created_at DESC")
+    .bind(id)
+    .all<WebhookRow>();
+
+  return c.json({
+    webhooks: rows.map((r) => ({
+      id: r.id,
+      url: r.url,
+      events: r.events.split(","),
+      active: r.active === 1,
+      createdAt: r.created_at,
     })),
   });
 });
@@ -133,6 +239,7 @@ developerRoutes.get("/developers/:id/keys", async (c) => {
 developerRoutes.delete("/developers/:id/keys/:key", async (c) => {
   const id = c.req.param("id");
   const key = c.req.param("key");
+  const adminActor = c.get("adminActor") || "admin";
 
   const result = await c.env.DB
     .prepare("UPDATE api_keys SET revoked_at = unixepoch() WHERE key = ? AND developer_id = ? AND revoked_at IS NULL")
@@ -142,6 +249,15 @@ developerRoutes.delete("/developers/:id/keys/:key", async (c) => {
   if (result.meta.changes === 0) {
     return c.json({ error: "Key not found, does not belong to this developer, or already revoked" }, 404);
   }
+
+  await writeAuditLog(c.env.DB, {
+    actorType: "admin",
+    actorId: adminActor,
+    action: "api_key.revoked",
+    targetType: "api_key",
+    targetId: key,
+    metadata: { developerId: id, source: "admin_dashboard" },
+  });
 
   return c.json({ message: "API key revoked" });
 });

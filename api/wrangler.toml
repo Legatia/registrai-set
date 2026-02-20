@@ -17,6 +17,9 @@ database_name = "kya-prod"
 database_id = "cd202d84-66a4-4d0b-b3a9-aba005fb58fe"
 
 [vars]
+# Comma-separated CORS allowlist for browser clients.
+# Leave unset during local/dev to allow all origins.
+# CORS_ORIGINS = "https://registrai.cc,https://www.registrai.cc"
 
 [observability]
 enabled = false

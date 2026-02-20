@@ -26,7 +26,7 @@ RegistrAI aggregates agent identities and reputation across chains into a single
                            └─────┬─────┘
                                  │
                            ┌─────▼─────┐
-                           │  REST API  │  15 endpoints
+                           │  REST API  │  Public + Developer + Admin endpoints
                            └─────┬─────┘
                                  │
                      ┌───────────┼───────────┐
@@ -89,10 +89,26 @@ The relayer scans configured L2 chains for `Registered` events, registers agents
 
 ```bash
 cd api
-cp .env.example .env
 npm install
-npm run dev            # http://localhost:3001
+# Local D1 migration (dev)
+npm run db:migrate:local
+
+# Local worker
+npm run dev
 ```
+
+Production API is deployed on:
+
+- `https://api.registrai.cc`
+
+API auth model:
+
+- `GET` endpoints are generally public
+- Most non-`GET` endpoints require `X-API-Key`
+- Admin endpoints require `X-Admin-Key`
+- Registration helper writes are public:
+  - `POST /agents/register/build`
+  - `POST /agents/register/confirm`
 
 ### 4. Frontend
 
@@ -102,6 +118,15 @@ cp .env.example .env.local
 npm install
 npm run dev            # http://localhost:3000
 ```
+
+Useful frontend routes:
+
+- `/explorer` — public explorer
+- `/query` — query tools
+- `/register` — frontend registration flow (wallet signs tx)
+- `/dashboard` — admin dashboard
+- `/dashboard/developer` — developer dashboard
+- `/api-docs` — API endpoint list and quick-start snippets
 
 ### 5. SDK
 
@@ -122,6 +147,10 @@ const registrai = new RegistrAI({ apiUrl: "https://api.registrai.cc" });
 const trusted = await registrai.isAgentTrusted(agentId);
 ```
 
+Package:
+
+- `@registrai/kya`
+
 ## Deployed Contracts
 
 | Network | Contract | Address |
@@ -138,8 +167,29 @@ Copy each `.env.example` to `.env` (or `.env.local` for frontend). Key variables
 
 - **Root `.env`** — deployer key, Sepolia RPC, Etherscan API key
 - **`relayer/.env`** — relayer private key, L1 RPC, L2 RPC URLs, master registry address
-- **`api/.env`** — database path, port
+- **`api/.env`** — local dev values only (production uses Wrangler bindings/secrets)
 - **`frontend/.env.local`** — API URL, master registry address, WalletConnect project ID
+
+## Operations
+
+Main ops runbook:
+
+- `api/DEPLOYMENT_RUNBOOK.md`
+
+Post-deploy smoke test:
+
+```bash
+cd api
+export ADMIN_KEY='...'
+npm run smoke:postdeploy
+```
+
+D1 backups:
+
+```bash
+cd api
+npm run db:backup
+```
 
 ## License
 

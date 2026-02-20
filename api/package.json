@@ -10,7 +10,10 @@
     "db:create": "wrangler d1 create kya-prod",
     "db:migrate": "wrangler d1 migrations apply kya-prod",
     "db:migrate:local": "wrangler d1 migrations apply kya-prod --local",
+    "db:backup": "bash ./scripts/backup-d1.sh",
+    "db:backup:local": "D1_REMOTE=0 bash ./scripts/backup-d1.sh",
     "typecheck": "tsc --noEmit",
+    "smoke:postdeploy": "bash ./scripts/post-deploy-smoke.sh",
     "sync:d1": "cd ../relayer && npm run export:d1 && cd ../api && npx wrangler d1 execute kya-prod --remote --file=d1_import.sql -y"
   },
   "dependencies": {

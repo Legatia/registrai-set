@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getChainName, getExplorerUrl } from "@/lib/chains";
 import { shortenHex } from "@/lib/format";
-import { IDENTITY_REGISTRIES, buildRegisterCalldata } from "@/lib/reputation";
+import { IDENTITY_REGISTRIES } from "@/lib/reputation";
 import {
   connectWallet,
   switchChain,
@@ -29,6 +29,7 @@ const AVAILABLE_CHAINS: RegistrationChain[] = Object.entries(IDENTITY_REGISTRIES
 const TESTNET_CHAIN_IDS = new Set([11155111, 84532]);
 const TESTNET_CHAINS = AVAILABLE_CHAINS.filter((c) => TESTNET_CHAIN_IDS.has(c.chainId));
 const MAINNET_CHAINS = AVAILABLE_CHAINS.filter((c) => !TESTNET_CHAIN_IDS.has(c.chainId));
+const API_BASE = process.env.NEXT_PUBLIC_KYA_API_URL || "http://localhost:3001";
 
 export function RegisterAgentForm() {
   const { network } = useNetwork();
@@ -101,12 +102,38 @@ export function RegisterAgentForm() {
         setWalletChainId(selectedChain.chainId);
       }
 
-      const data = buildRegisterCalldata(agentURI.trim());
+      const buildRes = await fetch(`${API_BASE}/agents/register/build`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chainId: selectedChain.chainId,
+          agentURI: agentURI.trim(),
+        }),
+      });
+      if (!buildRes.ok) {
+        const body = (await buildRes.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || `Build failed (${buildRes.status})`);
+      }
+      const buildPayload = (await buildRes.json()) as {
+        to: `0x${string}`;
+        data: `0x${string}`;
+      };
 
       const hash = await sendTransaction({
-        to: selectedChain.registryAddress,
-        data,
+        to: buildPayload.to,
+        data: buildPayload.data,
         chainId: selectedChain.chainId,
+      });
+
+      await fetch(`${API_BASE}/agents/register/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chainId: selectedChain.chainId,
+          txHash: hash,
+          walletAddress,
+          agentURI: agentURI.trim(),
+        }),
       });
 
       setTxHash(hash);
